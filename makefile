@@ -7,5 +7,6 @@ all: help
 help:
 	@echo "This script compiles the file(s) ${SRC}"
 	@echo "Compiled classes are stored in the classes/ directory"
+	@echo "Run scala -cp classes DPLL tests/... for results"
 
 .PHONY: all help
