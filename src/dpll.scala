@@ -1,7 +1,5 @@
 // TODO: 
-// 1. process the input
-// 2. preprocess, setting vals to 1
-// 3. do the rest of DPLL
+// 1. do the rest of DPLL
 
 import java.io._
 import scala.io.BufferedSource
