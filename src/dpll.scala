@@ -5,10 +5,6 @@ import java.io._
 import scala.io.BufferedSource
 import scala.io.Source
 
-import java.io._
-import scala.io.BufferedSource
-import scala.io.Source
-
 object DPLL {
 
 	class Clause(var literals: Array[Int], var sat: Boolean)
