@@ -1,5 +1,7 @@
 // TODO: 
-// 1. do the rest of DPLL
+// understand 2-literal watching
+// figure out the whole backtracking scheme
+// how and when to check whether or not program is satisfiable
 
 import java.io._
 import scala.io.BufferedSource
@@ -8,7 +10,7 @@ import scala.io.Source
 object DPLL {
 
 	class Clause(var literals: Array[Int], var sat: Boolean)
-	class Program(var clauses: Array[Clause], var varVals: Array[Int])
+	class Program(var clauses: Array[Clause], var varVals: Array[Int], var scores: scala.collection.mutable.Map[Int, Int])
 
 	sealed trait ProgramStatus
 
@@ -17,15 +19,69 @@ object DPLL {
 	case object Unsatisfiable extends ProgramStatus
 	case object Conflict extends ProgramStatus
 
-/*
-	/* Decide which variable to set using the VSIDS decision heuristic. */
-	def branchNextVSIDS(): Unit = {
 
+	/*/* Decide which variable to set using the VSIDS decision heuristic. */
+	def branchNextVSIDS(program: Program, highLiteral: Int): Program = {
+		if (highLiteral < 0){
+			program.varVals(Math.abs(highLiteral)) = 0
+		} else {
+			program.varVals(Math.abs(highLiteral)) = 1
+		}
+		return program
+	}*/
+
+	/* Check if clause is a unit clause, ie. one literal is unassigned and rest are false. */
+	def isUnit(clause: Clause, varVals: Array[Int]): = (Boolean, Int){
+		var unitLit = 0;
+		var seenUnassignedLit = false;
+		for (literal <- clause){
+			var litVal = varVals(Math.abs(literal)) // this is wrong this is the variable value not the literal
+			if (litVal != 0 && litVal != 1){
+				return (false, 0)
+			} else if (litVal == -1){
+				if (seenUnassignedLit){
+					return (false, 0)
+				}
+				unitLit = literal
+			}
+		}
+		return (true, unitLit)
 	}
 
 	/* Apply unit propogation (set a literal and propogate its implications) */
-	def deduce(): ProgramStatus = {
-		return Unknown;
+	def deduce(program: Program, literal: Int): ProgramStatus = {
+		// set the literal
+		if (highLiteral < 0){
+			program.varVals(Math.abs(highLiteral)) = 0
+		} else {
+			program.varVals(highLiteral) = 1
+		}
+		// for clause in program, if is unit clause, apply unit clause rule
+		// TODO: change to 2-literal watching
+		var unitLiterals = scala.collection.mutable.Map[Int, Boolean]
+		for (clause <- program.clauses){
+			var unitClause = isUnit(clause, program.varVals)
+			if (isUnit(clause)._1){
+				var literal = unitClause._2
+				var hasNot = (literal < 0)
+				if (literal < 0) {
+					program.varVals(Math.abs(literal)) = 0
+				} else {
+					program.varVals(literal) = 1
+				}
+				// check for conflicts
+				if (unitLiterals.contains(Math.abs(literal))){
+					if (unitLiterals(Math.abs(literal)) == false && !hasNot ||
+						unitLiterals(Math.abs(literal)) == true && hasNot){
+						return (program, Conflict) // TODO: this is messy with conflicts!
+						// the fact that we have already altered program is probs messy
+					}
+				} else {
+					unitLiterals += (Math.abs(literal) -> !hasNot)
+				}
+			}
+		}
+		return (program, Unknown)
 	}
 
 	/* ? */
@@ -38,14 +94,27 @@ object DPLL {
 
 	}
 
+	/* Find the literal with the highest VSIDS score. */
+	def getHighestScore(scores: scala.collection.mutable.Map[Int, Int]): Int = {
+		var highScore = 0;
+		var highLiteral = 0;
+		for (literal <- scores) {
+			if (scores(literal) > highScore){
+				highScore = scores(literal)
+				highLiteral = literal
+			}
+		}
+		return highLiteral
+	}
+
 	/* Implementation of the DPLL algorithm. */
 	def DPLL(program: Program): ProgramStatus = {
 		var status = Unknown;
 		var loop = true;
+		var highLiteral = getHighestScore(program.scores)
 		while (loop) {
-			branchNextVSIDS()
 			while (true) {
-				status = deduce()
+				status = deduce(program, highLiteral);
 				if (status == Conflict) {
 					var blevel = analyzeConflict()
 					if (blevel < 0){
@@ -61,10 +130,24 @@ object DPLL {
 			}
 		}
 	}
-	*/
+
+	/* Create a map of all literals and their VSIDS scores. */
+	def initializeVSIDSScores(program: Program): scala.collection.mutable.Map[Int, Int] = {
+		var scores = scala.collection.mutable.Map[Int, Int]()
+		for (clause <- program.clauses){
+			for (literal <- clause.literals){
+				if (scores.contains(literal)){
+					scores(literal) += 1
+				} else {
+					scores += (literal -> 1)
+				}
+			}
+		}
+		return scores
+	}
 
 	/* For all vars which appear in only one literal, literal = 1. */
-	def preprocess(program: Program, varCounts: Array[Int], varNot: Array[Boolean]): Program = {
+	def setUniqueVars(program: Program, varCounts: Array[Int], varNot: Array[Boolean]): Program = {
 		var num = 0
 		for (count <- varCounts){
 			if (count == 1){
@@ -77,6 +160,11 @@ object DPLL {
 			num += 1
 		}
 		return program
+	}
+
+	def preprocess(program: Program, varCounts: Array[Int], varNot: Array[Boolean]): Program = {
+		program.scores = initializeVSIDSScores(program)
+		return setUniqueVars(program, varCounts, varNot)
 	}
 
 	/* Construct the program as a list of clauses. */
@@ -114,7 +202,7 @@ object DPLL {
 			}
 			count += 1
 		}
-		var program = new Program(clauses, Array.fill[Int](numVars)(-1))
+		var program = new Program(clauses, Array.fill[Int](numVars)(-1), scala.collection.mutable.Map[Int, Int]())
 		program = preprocess(program, varCounts, varNot)
 		return program
 	}
@@ -141,6 +229,6 @@ object DPLL {
 		} catch {
 			case e:IOException => println("Error!"); System.exit(1)
 		}
-		// DPLL(program)
+		DPLL(program)
 	}
 }
