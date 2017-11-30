@@ -10,7 +10,8 @@ import scala.io.Source
 
 object DPLL {
 
-	class Clause(var literals: Array[Int], var sat: Boolean)
+	class Literal(var varNum: Int, var negated: Boolean)
+	class Clause(var literals: Array[Literal], var sat: Boolean)
 	class Program(var clauses: Array[Clause], var varVals: Array[Int], 
 		var scores: scala.collection.mutable.Map[Int, Int], var blevels: scala.collection.mutable.Map[Int, Array[Int]])
 
@@ -49,13 +50,50 @@ object DPLL {
 	}
 
 	/* Indicates whether the current assignment of variables is satisfiable. */
-	def isSatisfiable(program: Program): Boolean = {
-		return false;
+	def isSatisfiable(program: Program): ProgramStatus = {
+		for (assignment <- program.varVals){
+			if (assignment == -1){
+				return Unknown
+			}
+		}
+		for (clause <- program.clauses){
+			var isSat = false
+			for (literal <- clause.literals){
+				// if literal evaluates to 1, isSat = true, break
+				if (literal.negated == true && varVals(literal.varNum) == 0 ||
+					literal.negated == false && varVals(literal.varNum) == 1){
+					isSat = true // TODO: break out early from this
+				}
+			}
+			if (!isSat){
+				return Unsatisfiable
+			}
+		}
+		return Satisfiable
 	}
 
+	def setVariable(program: Program){
+
+	}
+
+	// deduce:
+	// set next var (for now this is next in order)
+	// apply unit propogation
+	// if status == conflict,
+		// add current assignment to hash table 
+		// unset var and any other vars which were set during propogation
+	// repeat process above setting to other value
+	// if no luck, backtrack to highest level where both values of that var have not been tried
+
+
+	// backtrack:
+	// if var = not(assignment in stack) + assignments below it in stack has been tried,
+	// pop it off and backtrack
+	
+
 	/* Apply unit propogation (set a literal and propogate its implications) */
-	def deduce(program: Program, highLiteral: Int): ProgramStatus = {
-		program.varVals(Math.abs(highLiteral)) = setToTrue(highLiteral)
+	def deduce(program: Program): ProgramStatus = {
+		program.varVals = setVariable(program)
 		var setVariables = program.blevels(program.blevels.size)
 		setVariables(highLiteral) = 1
 		// for clause in program, if is unit clause, apply unit clause rule
@@ -92,27 +130,19 @@ object DPLL {
 
 	}
 
-	/* Find the literal with the highest VSIDS score. */
-	def getHighestScore(scores: scala.collection.mutable.Map[Int, Int]): Int = {
-		var highScore = 0;
-		var highLiteral = 0;
-		for (literal <- scores) {
-			if (scores(literal) > highScore){
-				highScore = scores(literal)
-				highLiteral = literal
-			}
-		}
-		return highLiteral
-	}
-
 	/* Implementation of the DPLL algorithm. */
 	def DPLL(program: Program): ProgramStatus = {
-		var status = Unknown;
+		program = setUniqueVars(program);
+		var status = isSatisfiable(program);
+		if (status != Unknown){
+			return status
+		}
 		var loop = true;
+		var setVariables = scala.collection.mutable.Stack[(Int, Boolean)]
+		var setNext = 0;
 		while (loop) {
 			while (true) {
-				var highLiteral = getHighestScore(program.scores) // def more efficient way to do this
-				var results = deduce(program, highLiteral)
+				var results = deduce(program)
 				status = results._1
 				program = results._2
 				if (status == Conflict) {
@@ -131,79 +161,74 @@ object DPLL {
 		}
 	}
 
-	/* Create a map of all literals and their VSIDS scores. */
-	def initializeVSIDSScores(program: Program): scala.collection.mutable.Map[Int, Int] = {
-		var scores = scala.collection.mutable.Map[Int, Int]()
-		for (clause <- program.clauses){
+	/* Returns a map which contains each literal in the program and the number of times it appears. */
+	def countLiterals(clauses: Array[Clause]): scala.collection.mutable.Map[Int, Int] = {
+		var litCounts : scala.collection.mutable.Map[Int, Int] = scala.collection.mutable.Map[Literal, Int]();
+		for (clause <- clauses){
 			for (literal <- clause.literals){
-				if (scores.contains(literal)){
-					scores(literal) += 1
+				if (litCounts.contains(literal)){
+					litCounts(literal) += 1
 				} else {
-					scores += (literal -> 1)
+					litCounts += (literal -> 1)
 				}
 			}
 		}
-		return scores
+		return varCounts
 	}
 
 	/* For all vars which appear in only one literal, literal = 1. */
 	def setUniqueVars(program: Program, varCounts: Array[Int], varNot: Array[Boolean]): Program = {
 		var num = 0
-		for (count <- varCounts){
-			if (count == 1){
-				if (varNot(num) == true){
-					program.varVals(num) = 1
-				} else {
-					program.varVals(num) = 0
+		var litCounts = countLiterals(program.clauses);
+		for (literal <- varCounts){
+			if (varCounts(literal) == 1){
+				if (!varCounts.contains(Literal(literal.varNum, !(literal.negated)))) {
+					program.varVals(literal.varNum) = !(literal.negated)
 				}
 			}
-			num += 1
 		}
 		return program
 	}
 
-	def preprocess(program: Program, varCounts: Array[Int], varNot: Array[Boolean]): Program = {
-		program.scores = initializeVSIDSScores(program)
-		return setUniqueVars(program, varCounts, varNot)
+	/* Construct clause from input line, a string of integers. */
+	def constructClause(line: String, numVars: Int): Clause = {
+		var literalsInts = line.split("\\s+").map(_.toInt)
+		var literals : Array[Literal] = Array[Literal]
+		// check if vars out of bounds and update counter
+		for (num <- literalsInts) {
+			var varNum = Math.abs(num)
+			if (varNum > numVars - 1){
+				throw new IOException
+			}
+			var literal = Literal(varNum, (num > 0)) // TODO: think about -0 edge case
+			literals :+= literal
+		}
+		return new Clause(literals, false)
 	}
 
 	/* Construct the program as a list of clauses. */
 	@throws(classOf[IOException])
 	def constructProgram(source: BufferedSource): Program = {
-		var count = 0;
-		var numVars = 0;
-		var numClauses = 0;
+		var (count, numVars, numClauses) = (0, 0, 0);
 		var clauses : Array[Clause] = Array[Clause]()
 		var varCounts : Array[Int] = Array[Int]()
-		var varNot : Array[Boolean] = Array[Boolean]()
 		// construct a clause for each line
 		for (line <- source.getLines){
 			if (count == 0) {
 				var spec = line.split("\\s+")
-				numVars = spec(2).toInt + 1
-				numClauses = spec(3).toInt
-				varCounts = Array.fill[Int](numVars)(0)
-				varNot = Array.fill[Boolean](numVars)(false)
+				(numVars, numClauses) = (spec(2).toInt + 1, spec(3).toInt)
 			} else if (count > numClauses){
 				throw new IOException
 			} else {
-				var clause = line.split("\\s+").map(_.toInt)
-				// check if vars out of bounds and update counter
-				for (num <- clause) {
-					var numPos = Math.abs(num)
-					if (numPos > numVars - 1){
-						throw new IOException
-					}
-					varCounts(numPos) += 1
-					varNot(numPos) = (num > 0) // TODO: think about -0 edge case
+				try {
+					clauses :+= constructClause(line)
+				} catch {
+					throw new IOException // ??
 				}
-				val completeClause = new Clause(clause, false)
-				clauses = clauses :+ completeClause
 			}
 			count += 1
 		}
-		var program = new Program(clauses, Array.fill[Int](numVars)(-1), scala.collection.mutable.Map[Int, Int]())
-		program = preprocess(program, varCounts, varNot)
+		var program = new Program(clauses, Array.fill[Int](numVars)(-1))
 		return program
 	}
 
