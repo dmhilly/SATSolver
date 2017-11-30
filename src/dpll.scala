@@ -1,5 +1,6 @@
 // TODO: 
 // understand 2-literal watching
+// should be checking for whether both vars have been tried, not just if has been set
 // figure out the whole backtracking scheme
 // how and when to check whether or not program is satisfiable
 
@@ -10,7 +11,8 @@ import scala.io.Source
 object DPLL {
 
 	class Clause(var literals: Array[Int], var sat: Boolean)
-	class Program(var clauses: Array[Clause], var varVals: Array[Int], var scores: scala.collection.mutable.Map[Int, Int])
+	class Program(var clauses: Array[Clause], var varVals: Array[Int], 
+		var scores: scala.collection.mutable.Map[Int, Int], var blevels: scala.collection.mutable.Map[Int, Array[Int]])
 
 	sealed trait ProgramStatus
 
@@ -18,17 +20,6 @@ object DPLL {
 	case object Satisfiable extends ProgramStatus
 	case object Unsatisfiable extends ProgramStatus
 	case object Conflict extends ProgramStatus
-
-
-	/*/* Decide which variable to set using the VSIDS decision heuristic. */
-	def branchNextVSIDS(program: Program, highLiteral: Int): Program = {
-		if (highLiteral < 0){
-			program.varVals(Math.abs(highLiteral)) = 0
-		} else {
-			program.varVals(Math.abs(highLiteral)) = 1
-		}
-		return program
-	}*/
 
 	/* Check if clause is a unit clause, ie. one literal is unassigned and rest are false. */
 	def isUnit(clause: Clause, varVals: Array[Int]): = (Boolean, Int){
@@ -48,40 +39,47 @@ object DPLL {
 		return (true, unitLit)
 	}
 
-	/* Apply unit propogation (set a literal and propogate its implications) */
-	def deduce(program: Program, literal: Int): ProgramStatus = {
-		// set the literal
-		if (highLiteral < 0){
-			program.varVals(Math.abs(highLiteral)) = 0
-		} else {
-			program.varVals(highLiteral) = 1
+	/* Return variable value that makes literal true. */
+	def setToTrue(literal: Int): Int = {
+		if (literal < 0){
+			return 0
+		} else{
+			return 1
 		}
+	}
+
+	/* Indicates whether the current assignment of variables is satisfiable. */
+	def isSatisfiable(program: Program): Boolean = {
+		return false;
+	}
+
+	/* Apply unit propogation (set a literal and propogate its implications) */
+	def deduce(program: Program, highLiteral: Int): ProgramStatus = {
+		program.varVals(Math.abs(highLiteral)) = setToTrue(highLiteral)
+		var setVariables = program.blevels(program.blevels.size)
+		setVariables(highLiteral) = 1
 		// for clause in program, if is unit clause, apply unit clause rule
-		// TODO: change to 2-literal watching
-		var unitLiterals = scala.collection.mutable.Map[Int, Boolean]
 		for (clause <- program.clauses){
 			var unitClause = isUnit(clause, program.varVals)
 			if (isUnit(clause)._1){
 				var literal = unitClause._2
-				var hasNot = (literal < 0)
-				if (literal < 0) {
-					program.varVals(Math.abs(literal)) = 0
-				} else {
-					program.varVals(literal) = 1
+				var newLitValue = setToTrue(literal)
+				var oldLitValue = program.varVals(Math.abs(literal))
+				if (oldLitValue != -1 && oldLitValue != newLitValue){
+					return (Conflict, program)
 				}
-				// check for conflicts
-				if (unitLiterals.contains(Math.abs(literal))){
-					if (unitLiterals(Math.abs(literal)) == false && !hasNot ||
-						unitLiterals(Math.abs(literal)) == true && hasNot){
-						return (program, Conflict) // TODO: this is messy with conflicts!
-						// the fact that we have already altered program is probs messy
-					}
-				} else {
-					unitLiterals += (Math.abs(literal) -> !hasNot)
-				}
+				program.varVals(Math.abs(literal)) = newLitValue
+				setVariables(Math.abs(literal)) = 1
 			}
 		}
-		return (program, Unknown)
+		// update level
+		program.blevels += (program.blevels.size + 1 -> setVariables)
+		// check satisfiability
+		if (isSatisfiable(program)){
+			return (Satisfiable, program)
+		} else {
+			return (Unknown, program)
+		}
 	}
 
 	/* ? */
@@ -111,12 +109,14 @@ object DPLL {
 	def DPLL(program: Program): ProgramStatus = {
 		var status = Unknown;
 		var loop = true;
-		var highLiteral = getHighestScore(program.scores)
 		while (loop) {
 			while (true) {
-				status = deduce(program, highLiteral);
+				var highLiteral = getHighestScore(program.scores) // def more efficient way to do this
+				var results = deduce(program, highLiteral)
+				status = results._1
+				program = results._2
 				if (status == Conflict) {
-					var blevel = analyzeConflict()
+					var blevel = analyzeConflict(program, highLiteral)
 					if (blevel < 0){
 						return Unsatisfiable
 					} else {
@@ -125,7 +125,7 @@ object DPLL {
 				} else if (status == Satisfiable) {
 					return Satisfiable
 				} else {
-					loop = false; // ?? could be wrong
+					loop = false // ?? could be wrong
 				}
 			}
 		}
