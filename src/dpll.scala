@@ -1,7 +1,4 @@
 // TODO: 
-// write propogateAssignment
-// look into scala pointers so you don't have to return program, etc, every time
-// make sure you're checking for satisfiability and unit clauses in the right places and in right way
 // do thorough walk-through of code and test
 
 import java.io._
@@ -12,8 +9,14 @@ object DPLL {
 
 	class Literal(var varNum: Int, var negated: Boolean)
 	class Clause(var literals: Array[Literal], var sat: Boolean)
-	class Program(var clauses: Array[Clause], var varVals: Array[Int], 
-		var scores: scala.collection.mutable.Map[Int, Int], var blevels: scala.collection.mutable.Map[Int, Array[Int]])
+	class Program(val clauses: Array[Clause], val varVals: Array[Int]) {
+		var c : Array[Clause] = clauses
+		var v : Array[Int] = varVals
+
+		def updateVarVal(ind: Int, value: Int){
+			v(ind) = value
+		}
+	}
 
 	sealed trait ProgramStatus
 
@@ -22,78 +25,106 @@ object DPLL {
 	case object Unsatisfiable extends ProgramStatus
 	case object Conflict extends ProgramStatus
 
+	implicit def BoolToInt(b:Boolean) = if (b) 1 else 0
+
+
 	/* Check if clause is a unit clause, ie. one literal is unassigned and rest are false. */
-	def isUnit(clause: Clause, varVals: Array[Int]): = (Boolean, Int){
-		var unitLit = 0;
-		var seenUnassignedLit = false;
-		for (literal <- clause){
-			var litVal = varVals(Math.abs(literal)) // this is wrong this is the variable value not the literal
-			if (litVal != 0 && litVal != 1){
-				return (false, 0)
-			} else if (litVal == -1){
-				if (seenUnassignedLit){
-					return (false, 0)
+	def isUnit(literals: Array[Literal], varVals: Array[Int]): (Boolean, Literal) = {
+		var unassignedLit : Literal = null
+		for (literal <- literals){
+			if (varVals(literal.varNum) == 1 && literal.negated == false ||
+				varVals(literal.varNum) == 0 && literal.negated == true){
+				return (false, null)
+			} else if (varVals(literal.varNum) == -1){
+				if (unassignedLit != null){
+					unassignedLit = literal
+				} else {
+					return (false, null)
 				}
-				unitLit = literal
 			}
 		}
-		return (true, unitLit)
+		return (true, unassignedLit)
 	}
 
 	/* Indicates whether the current assignment of variables is satisfiable. */
-	def isSatisfiable(program: Program): ProgramStatus = {
+	def getStatus(program: Program): ProgramStatus = {
+		var allVarsSet = false
 		for (assignment <- program.varVals){
 			if (assignment == -1){
-				return Unknown
+				allVarsSet = false
 			}
 		}
 		for (clause <- program.clauses){
 			var isSat = false
 			for (literal <- clause.literals){
 				// if literal evaluates to 1, isSat = true, break
-				if (literal.negated == true && varVals(literal.varNum) == 0 ||
-					literal.negated == false && varVals(literal.varNum) == 1){
+				if (literal.negated == true && program.varVals(literal.varNum) == 0 ||
+					literal.negated == false && program.varVals(literal.varNum) == 1 ||
+					program.varVals(literal.varNum) == -1){
 					isSat = true
 				}
 			}
 			if (!isSat){
-				return Unsatisfiable
+				if (allVarsSet){
+					return Unsatisfiable
+				}
+				return Conflict
 			}
 		}
-		return Satisfiable
+		if (allVarsSet){
+			return Satisfiable
+		}
+		return Unknown
 	}
 
-	def propogateAssignment(): ProgramStatus = {
-		// propogate assignment
-		// if conflict, return Conflict
-		// return isSatisfiable
+	/* After setting variable, see if any clauses became unit and set variable values accordingly. */
+	def propogateAssignment(program: Program): (ProgramStatus, Array[Int]) = {
+		var variablesSet : Array[Int] = Array[Int]()
+		for (clause <- program.clauses) {
+			var result = isUnit(clause.literals, program.varVals)
+			if (result._1) {
+				var unitLit = result._2
+				var newVal = BoolToInt(!(unitLit.negated))
+				program.updateVarVal(unitLit.varNum, newVal)
+				variablesSet :+= unitLit.varNum
+			}	
+		}
+		return (getStatus(program), variablesSet)
+	}
+
+	/* Set all variables which were set during unit propogation back to 1. */
+	def unsetVars(program: Program, variablesSet: Array[Int]): Unit = {
+		for (variable <- variablesSet){
+			program.updateVarVal(variable, -1)
+		}
 	}
 
 	/* Set a variable, propogate its implications, detect conflicts, and backtrack. */
 	def deduce(program: Program, configStack: scala.collection.mutable.Stack[(Int, Boolean)],
-		variable: Int, triedConfigs: scala.collection.mutable.set[Set((Int, Boolean))]): ProgramStatus = {
-		for (value <- (1, 0)) {
-			var newConfig = configStack.toSet() :+ (variable, value)
+		variable: Int, triedConfigs: Set[Set[(Int, Boolean)]]): ProgramStatus = {
+		for (value <- Array(true, false)) {
+			var newConfig = configStack.toArray.toSet + (variable, value)
 			if (!triedConfigs.contains(newConfig)) {
-				program.varVals(variable) = value
+				program.updateVarVal(variable, value)
 				var (status, variablesSet) = propogateAssignment(program)
 				if (status == Conflict){
-					triedConfigs.add(newConfig) // add to hashtable
-					program.varVals = unsetVars(variablesSet, program)
-				} else{
-					configStack.push((variable, value)) // add assignment to config stack
+					triedConfigs += newConfig
+					variablesSet :+= variable
+					unsetVars(program, variablesSet)
+				} else {
+					configStack.push((variable, value))
 					return status
 				}
 			}
-			if (val == 0){ // tried both
-				return backtrack(configStack)
+			if (value == false){ // tried both
+				return backtrack(program, configStack, triedConfigs)
 			}
 		}
 	}
 
 	/* Backtrack to the highest level such that both values of the variable have not been tried. */
 	def backtrack(program: Program, configStack: scala.collection.mutable.Stack[(Int, Boolean)],
-		triedConfigs: scala.collection.mutable.set[Set((Int, Boolean))]): ProgramStatus = {
+		triedConfigs: Set[Set[(Int, Boolean)]]): ProgramStatus = {
 		if (configStack.isEmpty){
 			return Unsatisfiable
 		}
@@ -106,23 +137,9 @@ object DPLL {
 		}
 	}
 
-	/* Implementation of the DPLL algorithm. */
-	def DPLL(program: Program): ProgramStatus = {
-		program = setUniqueVars(program);
-		var status = isSatisfiable(program);
-		var configStack = scala.collection.mutable.Stack[(Int, Boolean)]
-		var triedConfigs = scala.collection.mutable.Set[Set(Int, Boolean)]
-		while (status == Unknown) {
-			var results = deduce(program, configStack, configStack.size, triedConfigs)
-			status = results._1
-			program = results._2
-		}
-		return status
-	}
-
 	/* Returns a map which contains each literal in the program and the number of times it appears. */
-	def countLiterals(clauses: Array[Clause]): scala.collection.mutable.Map[Int, Int] = {
-		var litCounts : scala.collection.mutable.Map[Int, Int] = scala.collection.mutable.Map[Literal, Int]();
+	def countLiterals(clauses: Array[Clause]): scala.collection.mutable.Map[Literal, Int] = {
+		var litCounts : scala.collection.mutable.Map[Literal, Int] = scala.collection.mutable.Map[Literal, Int]();
 		for (clause <- clauses){
 			for (literal <- clause.literals){
 				if (litCounts.contains(literal)){
@@ -132,34 +149,46 @@ object DPLL {
 				}
 			}
 		}
-		return varCounts
+		return litCounts
 	}
 
 	/* For all vars which appear in only one literal, literal = 1. */
-	def setUniqueVars(program: Program, varCounts: Array[Int], varNot: Array[Boolean]): Program = {
+	def setUniqueVars(program: Program, varCounts: Array[Int], varNot: Array[Boolean]): Unit = {
 		var num = 0
 		var litCounts = countLiterals(program.clauses);
 		for (literal <- varCounts){
 			if (varCounts(literal) == 1){
-				if (!varCounts.contains(Literal(literal.varNum, !(literal.negated)))) {
-					program.varVals(literal.varNum) = !(literal.negated)
+				var oppLiteral = new Literal(literal.varNum, !(literal.negated))
+				if (!varCounts.contains(oppLiteral)) {
+					program.updateVarVal(literal.varNum, BoolToInt(!(literal.negated)))
 				}
 			}
 		}
-		return program
+	}
+
+	/* Implementation of the DPLL algorithm. */
+	def DPLL(program: Program): ProgramStatus = {
+		setUniqueVars(program);
+		var status = getStatus(program);
+		var configStack = new scala.collection.mutable.Stack[(Int, Boolean)]
+		var triedConfigs : Set[Set[(Int, Boolean)]] = Set()
+		while (status == Unknown) {
+			status = deduce(program, configStack, configStack.size, triedConfigs)
+		}
+		return status
 	}
 
 	/* Construct clause from input line, a string of integers. */
 	def constructClause(line: String, numVars: Int): Clause = {
-		var literalsInts = line.split("\\s+").map(_.toInt)
-		var literals : Array[Literal] = Array[Literal]
+		var literalsInts = line.split("\\s+").map(_.toFloat)
+		var literals : Array[Literal] = Array[Literal]()
 		// check if vars out of bounds and update counter
 		for (num <- literalsInts) {
-			var varNum = Math.abs(num)
+			var varNum = Math.abs(num).toInt
 			if (varNum > numVars - 1){
 				throw new IOException
 			}
-			var literal = Literal(varNum, (num > 0)) // TODO: think about -0 edge case
+			var literal = new Literal(varNum, (Math.copySign(1, num) < 0))
 			literals :+= literal
 		}
 		return new Clause(literals, false)
@@ -175,14 +204,17 @@ object DPLL {
 		for (line <- source.getLines){
 			if (count == 0) {
 				var spec = line.split("\\s+")
-				(numVars, numClauses) = (spec(2).toInt + 1, spec(3).toInt)
+				numVars = spec(2).toInt + 1
+				numClauses = spec(3).toInt
 			} else if (count > numClauses){
 				throw new IOException
 			} else {
 				try {
-					clauses :+= constructClause(line)
+					clauses :+= constructClause(line, numVars)
 				} catch {
-					throw new IOException // ??
+					case e:IOException =>
+					println("More variables found than were specified."); 
+					System.exit(1)
 				}
 			}
 			count += 1
@@ -195,7 +227,11 @@ object DPLL {
 	def printProgram(p: Program) : Unit = {
 		for (clause <- p.clauses){
 			for (lit <- clause.literals){
-				print(lit + " ")
+				if (lit.negated){
+					print("!" + lit.varNum + " ")
+				} else{
+					print(lit.varNum + " ")
+				}
 			}
 			println(clause.sat)
 		}
@@ -211,8 +247,10 @@ object DPLL {
 			var program = constructProgram(bufferedSource)
 			printProgram(program)
 		} catch {
-			case e:IOException => println("Error!"); System.exit(1)
+			case e:IOException => 
+			println("More clauses found than were specified."); 
+			System.exit(1);
 		}
-		DPLL(program)
+		// DPLL(program)
 	}
 }
