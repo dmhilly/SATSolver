@@ -10,6 +10,7 @@ import scala.io.Source
 
 object DPLL {
 
+  // varNum is 0-indexed
 	class Literal(var varNum: Int, var negated: Boolean) {
 		def canEqual(a: Any) = a.isInstanceOf[Literal]
 		override def equals(that: Any): Boolean = 
@@ -42,7 +43,8 @@ object DPLL {
 
 	/* Backtrack to the highest level such that both values of the variable have not been tried. */
 	def backtrack(program: Program, configStack: scala.collection.mutable.Stack[(Int, Boolean)],
-		triedConfigs: scala.collection.mutable.Set[Set[(Int, Boolean)]]): ProgramStatus = {
+      triedConfigs: scala.collection.mutable.Set[Set[(Int, Boolean)]]): ProgramStatus = {
+    println("Backtracking:"+configStack)
 		if (configStack.isEmpty){
 			return Unsatisfiable
 		}
@@ -90,6 +92,7 @@ object DPLL {
 		while (setVariables){
 			setVariables = false
 			for (clause <- program.clauses) {
+        println("Analyzing clause: "+Util.clauseToString(clause));
 				var result = isUnit(clause.literals, program.varVals)
 				if (result._1) {
 					var unitLit = result._2
@@ -104,16 +107,22 @@ object DPLL {
 	}
 
 	/* Convert current configuration stack to a set and add assignment to it. */
-	def constructNewConfig(configStack: scala.collection.mutable.Stack[(Int, Boolean)], variable: Int, value: Boolean): Set[(Int, Boolean)] = {
+	def constructNewConfig(configStack: scala.collection.mutable.Stack[(Int, Boolean)],
+      variable: Int, value: Boolean): Set[(Int, Boolean)] = {
 		var configSet = configStack.toArray.toSet
 		var newAssignment = (variable, value)
 		return (configSet + newAssignment)
 	}
 
-	/* Set a variable, propogate its implications, detect conflicts, and backtrack. */
-	def deduce(program: Program, configStack: scala.collection.mutable.Stack[(Int, Boolean)], variable: Int, triedConfigs: scala.collection.mutable.Set[Set[(Int, Boolean)]]): ProgramStatus = {
+	/* Set a variable, propogate its implications, detect conflicts, and backtrack.
+   * Note: variables are 1-indexed
+   */
+	def deduce(program: Program, configStack: scala.collection.mutable.Stack[(Int, Boolean)],
+      variable: Int,
+      triedConfigs: scala.collection.mutable.Set[Set[(Int, Boolean)]]): ProgramStatus = {
 		for (value <- Array(true, false)) {
 			var newConfig = constructNewConfig(configStack, variable, value)
+      println("Trying: "+newConfig)
 			if (!triedConfigs.contains(newConfig)) {
 				program.updateVarVal(variable - 1, value)
 				var results = propogateAssignment(program)
@@ -195,10 +204,13 @@ object DPLL {
 
 	/* Implementation of the DPLL algorithm. */
 	def DPLL(program: Program): ProgramStatus = {
+    println("Vars:"+program.v.toList)
+    println("Clauses: "+Util.clausesToString(program.clauses));
 		setUniqueVars(program)
 		var status = getStatus(program)
 		var configStack = new scala.collection.mutable.Stack[(Int, Boolean)]
-		var triedConfigs : scala.collection.mutable.Set[Set[(Int, Boolean)]] = scala.collection.mutable.Set[Set[(Int, Boolean)]]()
+		var triedConfigs : scala.collection.mutable.Set[Set[(Int, Boolean)]] 
+      = scala.collection.mutable.Set[Set[(Int, Boolean)]]()
 		var nextVar = 1
 		while (status == Unknown) {
 			while ((nextVar < program.varVals.size) && program.varVals(nextVar - 1) != -1) {
@@ -211,6 +223,20 @@ object DPLL {
 
 	/* Construct clause from input line, a string of integers. */
 	def constructClause(line: String, numVars: Int): Clause = {
+		var literalsStrings = line.split("\\s+")
+		var literals : Array[Literal] = Array[Literal]()
+		for (s <- literalsStrings) {
+      var str = s
+      var negated = false;
+      if(str.charAt(0) == '-') {
+        negated = true;
+        str = s.substring(1);
+      }
+      literals :+= new Literal(str.toInt, negated)
+		}
+		return new Clause(literals, false)
+
+    /** OLD IMPLEMENTATION
 		var literalsInts = line.split("\\s+").map(_.toFloat)
 		var literals : Array[Literal] = Array[Literal]()
 		// check if vars out of bounds and update counter
@@ -225,6 +251,7 @@ object DPLL {
 			}
 		}
 		return new Clause(literals, false)
+    */
 	}
 
 	/* Construct the program as a list of clauses. */
