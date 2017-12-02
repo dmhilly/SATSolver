@@ -1,6 +1,7 @@
 // TODO: 
 // do thorough walk-through of code and test
 // Stack deprecated maybe use List instead
+// JUST REALIZED 0's ARE NOT VARS. ADJUST.
 
 import java.io._
 import scala.io.BufferedSource
@@ -36,6 +37,7 @@ object DPLL {
 	case object Conflict extends ProgramStatus
 
 	implicit def BoolToInt(b:Boolean) = if (b) 1 else 0
+	implicit def IntToBool(i:Int) = if (i == 1) true else false
 
 	/* Backtrack to the highest level such that both values of the variable have not been tried. */
 	def backtrack(program: Program, configStack: scala.collection.mutable.Stack[(Int, Boolean)],
@@ -55,7 +57,7 @@ object DPLL {
 	/* Set all variables which were set during unit propogation back to 1. */
 	def unsetVars(program: Program, variablesSet: Array[Int]): Unit = {
 		for (variable <- variablesSet){
-			program.updateVarVal(variable, -1)
+			program.updateVarVal(variable - 1, -1)
 		}
 	}
 
@@ -63,10 +65,10 @@ object DPLL {
 	def isUnit(literals: Array[Literal], varVals: Array[Int]): (Boolean, Literal) = {
 		var unassignedLit : Literal = null
 		for (literal <- literals){
-			if ((varVals(literal.varNum) == 1 && literal.negated == false) ||
-				(varVals(literal.varNum) == 0 && literal.negated == true)) {
+			if ((varVals(literal.varNum - 1) == 1 && literal.negated == false) ||
+				(varVals(literal.varNum - 1) == 0 && literal.negated == true)) {
 				return (false, null) // clause evaluates to true
-			} else if (varVals(literal.varNum) == -1){
+			} else if (varVals(literal.varNum - 1) == -1){
 				if (unassignedLit == null){
 					unassignedLit = literal
 				} else {
@@ -91,7 +93,7 @@ object DPLL {
 				if (result._1) {
 					var unitLit = result._2
 					var newVal = BoolToInt(!(unitLit.negated))
-					program.updateVarVal(unitLit.varNum, newVal)
+					program.updateVarVal(unitLit.varNum - 1, newVal)
 					variablesSet :+= unitLit.varNum
 					setVariables = true
 				}	
@@ -111,17 +113,25 @@ object DPLL {
 	def deduce(program: Program, configStack: scala.collection.mutable.Stack[(Int, Boolean)], variable: Int, triedConfigs: scala.collection.mutable.Set[Set[(Int, Boolean)]]): ProgramStatus = {
 		for (value <- Array(true, false)) {
 			var newConfig = constructNewConfig(configStack, variable, value)
-			if (!triedConfigs.contains(newConfig)) { // TODO: test if this correctly tests matching (probs not)
-				program.updateVarVal(variable, value)
+			if (!triedConfigs.contains(newConfig)) {
+				program.updateVarVal(variable - 1, value)
 				var results = propogateAssignment(program)
 				var status = results._1
 				var variablesSet = results._2
+				for (variable <- variablesSet){
+					var assignment = (variable, IntToBool(program.varVals(variable - 1)))
+					newConfig += assignment
+				}
+				triedConfigs += newConfig
 				if (status == Conflict){
-					triedConfigs += newConfig
 					variablesSet :+= variable
 					unsetVars(program, variablesSet)
 				} else {
 					configStack.push((variable, value))
+					for (variable <- variablesSet){
+						// is this rright??
+						configStack.push((variable, IntToBool(program.varVals(variable - 1))))
+					}
 					return status
 				}
 			}
@@ -132,26 +142,21 @@ object DPLL {
 	/* Indicates whether the current assignment of variables is satisfiable. */
 	def getStatus(program: Program): ProgramStatus = {
 		var allVarsSet = true
-		for (assignment <- program.varVals){
-			if (assignment == -1){
-				allVarsSet = false
-			}
-		}
 		var conflictClause = false
 		for (clause <- program.clauses){
 			var isSat = false
 			for (literal <- clause.literals){
 				// if literal evaluates to 1, isSat = true, break
-				if (literal.negated == true && program.varVals(literal.varNum) == 0 ||
-					literal.negated == false && program.varVals(literal.varNum) == 1 ||
-					program.varVals(literal.varNum) == -1) {
+				if (literal.negated == true && program.varVals(literal.varNum - 1) == 0 ||
+					literal.negated == false && program.varVals(literal.varNum - 1) == 1 ||
+					program.varVals(literal.varNum - 1) == -1) {
 					isSat = true
+				} 
+				if (program.varVals(literal.varNum - 1) == -1){
+					allVarsSet = false
 				}
 			}
 			if (!isSat) {
-				if (allVarsSet) {
-					return Unsatisfiable
-				}
 				conflictClause = true
 			}
 		}
@@ -183,7 +188,7 @@ object DPLL {
 		for (literal <- seenLits){
 			var oppLiteral = new Literal(literal.varNum, !(literal.negated))
 			if (seenLits.find(_ == oppLiteral) == None) {
-				program.updateVarVal(literal.varNum, BoolToInt(!(literal.negated)))
+				program.updateVarVal(literal.varNum - 1, BoolToInt(!(literal.negated)))
 			}
 		}
 	}
@@ -194,8 +199,12 @@ object DPLL {
 		var status = getStatus(program)
 		var configStack = new scala.collection.mutable.Stack[(Int, Boolean)]
 		var triedConfigs : scala.collection.mutable.Set[Set[(Int, Boolean)]] = scala.collection.mutable.Set[Set[(Int, Boolean)]]()
+		var nextVar = 1
 		while (status == Unknown) {
-			status = deduce(program, configStack, configStack.size, triedConfigs)
+			while ((nextVar < program.varVals.size) && program.varVals(nextVar - 1) != -1) {
+				nextVar += 1
+			}
+			status = deduce(program, configStack, nextVar, triedConfigs)
 		}
 		return status
 	}
@@ -206,12 +215,14 @@ object DPLL {
 		var literals : Array[Literal] = Array[Literal]()
 		// check if vars out of bounds and update counter
 		for (num <- literalsInts) {
-			var varNum = Math.abs(num).toInt
-			if (varNum > numVars - 1){
-				throw new IOException
+			if (num != 0) {
+				var varNum = Math.abs(num).toInt
+				if (varNum > numVars){
+					throw new IOException
+				}
+				var literal = new Literal(varNum, (num < 0))
+				literals :+= literal
 			}
-			var literal = new Literal(varNum, (Math.copySign(1, num) < 0))
-			literals :+= literal
 		}
 		return new Clause(literals, false)
 	}
@@ -226,7 +237,7 @@ object DPLL {
 		for (line <- source.getLines){
 			if (count == 0) {
 				var spec = line.split("\\s+")
-				numVars = spec(2).toInt + 1
+				numVars = spec(2).toInt
 				numClauses = spec(3).toInt
 			} else if (count > numClauses){
 				throw new IOException
@@ -250,7 +261,7 @@ object DPLL {
 		for (clause <- p.clauses){
 			for (lit <- clause.literals){
 				if (lit.negated){
-					print("!" + lit.varNum + " ")
+					print("-" + lit.varNum + " ")
 				} else{
 					print(lit.varNum + " ")
 				}
@@ -267,6 +278,7 @@ object DPLL {
 		val bufferedSource = Source.fromFile(args(0))
 		try {
 			var program = constructProgram(bufferedSource)
+			// printProgram(program)
 			var status = DPLL(program)
 			if (status == Satisfiable){
 				println("SATISFIABLE")
