@@ -1,7 +1,8 @@
 // TODO: 
-// do thorough walk-through of code and test
+// seems to be hanging for bench3/aim-100-1_6-no-1.cnf
 // Stack deprecated maybe use List instead
-// JUST REALIZED 0's ARE NOT VARS. ADJUST.
+// add random restart optimization
+// add CDCL
 
 import java.io._
 import scala.io.BufferedSource
@@ -129,7 +130,6 @@ object DPLL {
 				} else {
 					configStack.push((variable, value))
 					for (variable <- variablesSet){
-						// is this rright??
 						configStack.push((variable, IntToBool(program.varVals(variable - 1))))
 					}
 					return status
@@ -278,18 +278,17 @@ object DPLL {
 		val bufferedSource = Source.fromFile(args(0))
 		try {
 			var program = constructProgram(bufferedSource)
-			// printProgram(program)
 			var status = DPLL(program)
 			if (status == Satisfiable){
-				println("SATISFIABLE")
 				for (value <- program.varVals){
-					print(value + " ")
+					System.out.print(value + " ")
 				}
-				println()
+				System.out.println()
+				System.out.println("SATISFIABLE")
 			} else if (status == Unsatisfiable){
-				println("UNSATISFIABLE")
+				System.out.println("UNSATISFIABLE")
 			} else{
-				println("Unknown status: " + status)
+				System.out.println("Unknown status: " + status)
 			}
 		} catch {
 			case e:IOException => 

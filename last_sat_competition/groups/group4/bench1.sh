@@ -8,13 +8,13 @@ s=0
 w=0
 
 for i in `cat name1`; do
-		python dpll.py ../../bench1/sat/$i > results 2>&1
-		if grep -q "[^N]SATISFIABLE" results; then
-		  echo "$i Pass!"
+		scala -cp ../../../classes DPLL ../../bench1/sat/$i > results 2>&1
+		if grep -q "SATISFIABLE" results; then
+		  echo "$i Pass! sat"
 			let "c+=1"
 			let "s+=1"
 	  else
-      echo "$i Wrong!"
+      echo "$i Wrong! sat"
 			let "s+=1"
 			let "w+=1"
 	  fi
@@ -23,13 +23,13 @@ for i in `cat name1`; do
 done
 
 for i in `cat name2`; do
-		python dpll.py ../../bench1/unsat/$i > results 2>&1
+		scala -cp ../../../classes DPLL ../../bench1/unsat/$i > results 2>&1
 		if grep -q "UNSATISFIABLE" results; then
-		  echo "$i Pass!"
+		  echo "$i Pass! unsat"
 			let "c+=1"
 			let "s+=1"
 	  else
-      echo "$i Wrong!"
+      echo "$i Wrong! unsat"
 			let "s+=1"
 			let "w+=1"
 	  fi
@@ -43,3 +43,4 @@ echo "Pass: $c/$s"
 END=$(date +%s)
 DIFF=$((  $END - $START ))
 echo "Took $DIFF seconds."
+exit 1
