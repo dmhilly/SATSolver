@@ -1,6 +1,6 @@
 
 object CDCL {
-  val enabled = true
+  val enabled = false
 
   type Assignment = (Int, Boolean)
   
