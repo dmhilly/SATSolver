@@ -22,7 +22,7 @@ object DPLL {
 
 	class Clause(var literals: Array[Literal], var sat: Boolean)
 
-	class Program(val clauses: Array[Clause], val varVals: Array[Int]) {
+	class Program(var clauses: Array[Clause], val varVals: Array[Int]) {
 		var c : Array[Clause] = clauses
 		var v : Array[Int] = varVals
 
@@ -49,10 +49,12 @@ object DPLL {
       program: Program,
       configStack: scala.collection.mutable.Stack[State],
       triedAssignments: scala.collection.mutable.Set[Set[Assignment]]): ProgramStatus = {
-    println("Backtracking:"+configStack)
+    println("Backtracking")
 		if (configStack.isEmpty){
 			return Unsatisfiable
 		}
+    println("Stack="+Util.configStackToString(configStack))
+    println("Impl="+Util.implicationGraphToString(configStack.top.implications));
 		var highestAssignment = configStack.pop().assignments.last
     var assignments = List[Assignment]()
     if(!configStack.isEmpty){
@@ -89,58 +91,60 @@ object DPLL {
 			}
 		}
 		if (unassignedLit == null){
+      println("Bad clause:"+Util.clauseToString(new Clause(literals, false)))
 			return (false, null) // clause evaluates to false, nothing unassigned
 		}
 		return (true, unassignedLit)
 	}
 
 	/* After setting variable, see if any clauses became unit and set variable values accordingly. */
-	def propogateAssignment(program: Program): (ProgramStatus, Array[Int]) = {
+	def propogateAssignment(program: Program, i: CDCL.ImplicationGraph): (ProgramStatus, Array[Int]) = {
 		var variablesSet : Array[Int] = Array[Int]()
 		var setVariables = true
+    println("Propogating:"+program.varVals.toList)
 		while (setVariables){
 			setVariables = false
+      // Do updates at end to catch any conflicts
+      var updates = Set[(Int, Boolean)]()
 			for (clause <- program.clauses) {
 				var result = isUnit(clause.literals, program.varVals)
 				if (result._1) {
+          println(
+            "Found unit clause:"+Util.clauseToString(clause)+"; Literal: "+Util.literalToString(result._2))
+          CDCL.updateImplicationGraph(i, clause, result._2)
 					var unitLit = result._2
 					var newVal = BoolToInt(!(unitLit.negated))
-					program.updateVarVal(unitLit.varNum, newVal)
+          updates += ((unitLit.varNum, newVal))
 					variablesSet :+= unitLit.varNum
 					setVariables = true
 				}	
 			}
+      updates.foreach((assign) => {
+        program.updateVarVal(assign._1, assign._2)
+      })
 		}
 		return (getStatus(program), variablesSet)
 	}
 
-  /*
-	// Convert current configuration stack to a set and add assignment to it.
-	def constructNewConfig(configStack: scala.collection.mutable.Stack[Config],
-      variable: Int, value: Boolean): Set[Config] = {
-		var configSet = configStack.toArray.toSet
-		var newAssignment = (variable, value, null)
-		return (configSet + newAssignment)
-	}
-  */
-
-	/* Set a variable, propogate its implications, detect conflicts, and backtrack.
-   * Note: variables are 1-indexed
-   */
+	/* Set a variable, propogate its implications, detect conflicts, and backtrack. */
 	def deduce(program: Program,
       configStack: scala.collection.mutable.Stack[State],
       variable: Int,
       triedAssignments: scala.collection.mutable.Set[Set[Assignment]]): ProgramStatus = {
+    var newImplicationGraph = CDCL.emptyGraph()
 		for (value <- Array(true, false)) {
       var assignments = List[Assignment]()
+      var implications = CDCL.emptyGraph()
       if(!configStack.isEmpty){
         assignments = configStack.top.assignments
+        implications = configStack.top.implications
       }
       var newAssignments = assignments :+ (variable, value)
 			if (!triedAssignments.contains(newAssignments.toSet)) {
         println("Trying: "+(variable, value))
 				program.updateVarVal(variable, value)
-				var results = propogateAssignment(program)
+        newImplicationGraph = CDCL.copyGraph(implications)
+				var results = propogateAssignment(program, newImplicationGraph)
 				var status = results._1
 				var variablesSet = results._2
 				for (variable <- variablesSet){
@@ -151,20 +155,35 @@ object DPLL {
 				if (status == Conflict){
 					variablesSet :+= variable
 					unsetVars(program, variablesSet)
+          if(CDCL.enabled) {
+            var newClause = CDCL.getConflictClause(newImplicationGraph)
+            if(newClause == null) {
+              println("No conflict")
+            } else {
+              println("Added clause: "+Util.clauseToString(newClause))
+              program.clauses = program.clauses :+ newClause
+            }
+          }
 				} else {
-          var newState = new State(assignments :+ (variable, value), null)
+          var newState = new State(assignments :+ (variable, value), newImplicationGraph)
 					configStack.push(newState)
 					for (variable <- variablesSet){
             var lastState = configStack.top
             newState = new State(
-              lastState.assignments :+ (variable, IntToBool(program.varVals(variable))), null)
+              lastState.assignments :+ (variable,
+                IntToBool(program.varVals(variable))), newImplicationGraph)
 						configStack.push(newState)
 					}
 					return status
 				}
 			}
 		}
-		return backtrack(program, configStack, triedAssignments)
+    if(CDCL.enabled) {
+      return CDCL.backjump(program, configStack, triedAssignments, newImplicationGraph)
+      // return backtrack(program, configStack, triedAssignments)
+    } else{
+      return backtrack(program, configStack, triedAssignments)
+    }
 	}
 
 	/* Indicates whether the current assignment of variables is satisfiable. */
@@ -223,9 +242,10 @@ object DPLL {
 
 	/* Implementation of the DPLL algorithm. */
 	def DPLL(program: Program): ProgramStatus = {
+    println("NOT TRIMMING UNIQUE VARS!!! CHANGE THIS!!!")
     println("Vars:"+program.v.toList)
     println("Clauses: "+Util.clausesToString(program.clauses));
-		setUniqueVars(program)
+		// setUniqueVars(program)
 		var status = getStatus(program)
 		var configStack = new scala.collection.mutable.Stack[State]
 		var triedAssignments : scala.collection.mutable.Set[Set[Assignment]] 
