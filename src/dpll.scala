@@ -10,12 +10,12 @@ import scala.io.Source
 
 object DPLL {
 
-  // varNum is 0-indexed
 	class Literal(var varNum: Int, var negated: Boolean) {
 		def canEqual(a: Any) = a.isInstanceOf[Literal]
 		override def equals(that: Any): Boolean = 
 			that match {
-				case that: Literal => that.canEqual(this) && this.varNum == that.varNum && this.negated == that.negated
+				case that: Literal => 
+          that.canEqual(this) && this.varNum == that.varNum && this.negated == that.negated
 				case _ => false
 		}
 	}
@@ -31,6 +31,8 @@ object DPLL {
 		}
 	}
 
+  class Config(varNum: Int, set: Boolean, impl: CDCL.ImplicationGraph)
+
 	sealed trait ProgramStatus
 
 	case object Unknown extends ProgramStatus
@@ -42,7 +44,9 @@ object DPLL {
 	implicit def IntToBool(i:Int) = if (i == 1) true else false
 
 	/* Backtrack to the highest level such that both values of the variable have not been tried. */
-	def backtrack(program: Program, configStack: scala.collection.mutable.Stack[(Int, Boolean)],
+	def backtrack(
+      program: Program,
+      configStack: scala.collection.mutable.Stack[(Int, Boolean)],
       triedConfigs: scala.collection.mutable.Set[Set[(Int, Boolean)]]): ProgramStatus = {
     println("Backtracking:"+configStack)
 		if (configStack.isEmpty){
@@ -60,7 +64,7 @@ object DPLL {
 	/* Set all variables which were set during unit propogation back to 1. */
 	def unsetVars(program: Program, variablesSet: Array[Int]): Unit = {
 		for (variable <- variablesSet){
-			program.updateVarVal(variable - 1, -1)
+			program.updateVarVal(variable, -1)
 		}
 	}
 
@@ -68,10 +72,10 @@ object DPLL {
 	def isUnit(literals: Array[Literal], varVals: Array[Int]): (Boolean, Literal) = {
 		var unassignedLit : Literal = null
 		for (literal <- literals){
-			if ((varVals(literal.varNum - 1) == 1 && literal.negated == false) ||
-				(varVals(literal.varNum - 1) == 0 && literal.negated == true)) {
+			if ((varVals(literal.varNum) == 1 && literal.negated == false) ||
+				(varVals(literal.varNum) == 0 && literal.negated == true)) {
 				return (false, null) // clause evaluates to true
-			} else if (varVals(literal.varNum - 1) == -1){
+			} else if (varVals(literal.varNum) == -1){
 				if (unassignedLit == null){
 					unassignedLit = literal
 				} else {
@@ -92,12 +96,11 @@ object DPLL {
 		while (setVariables){
 			setVariables = false
 			for (clause <- program.clauses) {
-        println("Analyzing clause: "+Util.clauseToString(clause));
 				var result = isUnit(clause.literals, program.varVals)
 				if (result._1) {
 					var unitLit = result._2
 					var newVal = BoolToInt(!(unitLit.negated))
-					program.updateVarVal(unitLit.varNum - 1, newVal)
+					program.updateVarVal(unitLit.varNum, newVal)
 					variablesSet :+= unitLit.varNum
 					setVariables = true
 				}	
@@ -122,14 +125,14 @@ object DPLL {
       triedConfigs: scala.collection.mutable.Set[Set[(Int, Boolean)]]): ProgramStatus = {
 		for (value <- Array(true, false)) {
 			var newConfig = constructNewConfig(configStack, variable, value)
-      println("Trying: "+newConfig)
 			if (!triedConfigs.contains(newConfig)) {
-				program.updateVarVal(variable - 1, value)
+        println("Trying: "+newConfig)
+				program.updateVarVal(variable, value)
 				var results = propogateAssignment(program)
 				var status = results._1
 				var variablesSet = results._2
 				for (variable <- variablesSet){
-					var assignment = (variable, IntToBool(program.varVals(variable - 1)))
+					var assignment = (variable, IntToBool(program.varVals(variable)))
 					newConfig += assignment
 				}
 				triedConfigs += newConfig
@@ -139,7 +142,7 @@ object DPLL {
 				} else {
 					configStack.push((variable, value))
 					for (variable <- variablesSet){
-						configStack.push((variable, IntToBool(program.varVals(variable - 1))))
+						configStack.push((variable, IntToBool(program.varVals(variable))))
 					}
 					return status
 				}
@@ -156,12 +159,12 @@ object DPLL {
 			var isSat = false
 			for (literal <- clause.literals){
 				// if literal evaluates to 1, isSat = true, break
-				if (literal.negated == true && program.varVals(literal.varNum - 1) == 0 ||
-					literal.negated == false && program.varVals(literal.varNum - 1) == 1 ||
-					program.varVals(literal.varNum - 1) == -1) {
+				if (literal.negated == true && program.varVals(literal.varNum) == 0 ||
+					literal.negated == false && program.varVals(literal.varNum) == 1 ||
+					program.varVals(literal.varNum) == -1) {
 					isSat = true
 				} 
-				if (program.varVals(literal.varNum - 1) == -1){
+				if (program.varVals(literal.varNum) == -1){
 					allVarsSet = false
 				}
 			}
@@ -197,7 +200,7 @@ object DPLL {
 		for (literal <- seenLits){
 			var oppLiteral = new Literal(literal.varNum, !(literal.negated))
 			if (seenLits.find(_ == oppLiteral) == None) {
-				program.updateVarVal(literal.varNum - 1, BoolToInt(!(literal.negated)))
+				program.updateVarVal(literal.varNum, BoolToInt(!(literal.negated)))
 			}
 		}
 	}
@@ -211,9 +214,9 @@ object DPLL {
 		var configStack = new scala.collection.mutable.Stack[(Int, Boolean)]
 		var triedConfigs : scala.collection.mutable.Set[Set[(Int, Boolean)]] 
       = scala.collection.mutable.Set[Set[(Int, Boolean)]]()
-		var nextVar = 1
+		var nextVar = 0
 		while (status == Unknown) {
-			while ((nextVar < program.varVals.size) && program.varVals(nextVar - 1) != -1) {
+			while ((nextVar < program.varVals.size) && program.varVals(nextVar) != -1) {
 				nextVar += 1
 			}
 			status = deduce(program, configStack, nextVar, triedConfigs)
@@ -226,13 +229,15 @@ object DPLL {
 		var literalsStrings = line.split("\\s+")
 		var literals : Array[Literal] = Array[Literal]()
 		for (s <- literalsStrings) {
-      var str = s
-      var negated = false;
-      if(str.charAt(0) == '-') {
-        negated = true;
-        str = s.substring(1);
+      if(s != "0"){
+        var str = s
+        var negated = false;
+        if(str.charAt(0) == '-') {
+          negated = true;
+          str = s.substring(1);
+        }
+        literals :+= new Literal((str.toInt)-1, negated)
       }
-      literals :+= new Literal(str.toInt, negated)
 		}
 		return new Clause(literals, false)
 

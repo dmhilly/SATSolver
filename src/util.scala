@@ -1,13 +1,18 @@
 
 object Util {
+
+  def literalToString(l: DPLL.Literal) : String = {
+      if(l.negated){
+        return "not(x"+l.varNum+") "
+      } else{
+        return "x"+l.varNum+" "
+      }
+  }
+  
   def clauseToString(clause: DPLL.Clause) : String = {
     var toReturn = ""
     for(literal <- clause.literals) {
-      if(literal.negated){
-        toReturn += "not(x"+literal.varNum+") "
-      } else{
-        toReturn += "x"+literal.varNum+" "
-      }
+      toReturn += literalToString(literal)
     }
     return toReturn
   }
