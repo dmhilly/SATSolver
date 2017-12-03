@@ -70,12 +70,15 @@ unsat3:
 
 sathard:
 	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-100-1_6-yes1-1.cnf
+
+sathard2:
 	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-200-2_0-yes1-1.cnf
 	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-200-6_0-yes1-1.cnf
-
 unsathard:
-	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-50-2_0-no-4.cnf
 	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-100-1_6-no-1.cnf
+
+unsathard2:
+	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-50-2_0-no-4.cnf
 	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-200-1_6-no-1.cnf
 	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-200-2_0-no-1.cnf
 
