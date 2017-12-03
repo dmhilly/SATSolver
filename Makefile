@@ -6,6 +6,9 @@ all: help
 	-[ -e classes ] || mkdir classes
 	scalac -d classes ${SRC} ${CDCL} ${UTIL}
 
+bench1:
+	./last_sat_competition/groups/group4/bench1.sh
+
 backjump:
 	scala -cp classes DPLL tests/integration/sat/backjumpsimple.cnf
 
@@ -66,8 +69,16 @@ unsat3:
 	scala -cp classes DPLL last_sat_competition/bench2/unsat/180-2200.cnf
 
 sathard:
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-100-1_6-yes1-1.cnf
 	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-200-2_0-yes1-1.cnf
 	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-200-6_0-yes1-1.cnf
+
+unsathard:
+	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-50-2_0-no-4.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-100-1_6-no-1.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-200-1_6-no-1.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-200-2_0-no-1.cnf
+
 help:
 	@echo "This script compiles the file(s) ${SRC}"
 	@echo "Compiled classes are stored in the classes/ directory"
