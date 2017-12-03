@@ -1,6 +1,6 @@
 
 object CDCL {
-  val enabled = false
+  val enabled = true
 
   type Assignment = (Int, Boolean)
   
@@ -126,6 +126,7 @@ object CDCL {
         println("PRUNING "+newAssignments)
       }
       if(countVarsSet(conflictVars, assignments) <= 1 && !triedAssignments.contains(newAssignments.toSet)){
+        DPLL.setVarVals(assignments, program)
         return DPLL.deduce(program, configStack, highestAssignment._1, triedAssignments)
       }
     }

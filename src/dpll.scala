@@ -1,4 +1,6 @@
 // TODO: 
+// Right now, after backtracking, playing forward doesn't work (skips unit prop)
+// See the example "easy.cnf"
 // Clean
 // seems to be hanging for bench3/aim-100-1_6-no-1.cnf
 // Stack deprecated maybe use List instead
@@ -23,7 +25,7 @@ object DPLL {
 
 	class Clause(var literals: Array[Literal], var sat: Boolean)
 
-	class Program(var clauses: Array[Clause], val varVals: Array[Int]) {
+	class Program(var clauses: Array[Clause], var varVals: Array[Int]) {
 		var c : Array[Clause] = clauses
 		var v : Array[Int] = varVals
 
@@ -33,7 +35,9 @@ object DPLL {
 	}
 
   type Assignment = (Int, Boolean)
-  class State(var assignments: List[Assignment], var implications: CDCL.ImplicationGraph)
+  class State(
+    var assignments: List[Assignment],
+    var implications: CDCL.ImplicationGraph)
 
 	sealed trait ProgramStatus
 
@@ -56,15 +60,19 @@ object DPLL {
 		}
     println("Stack="+Util.configStackToString(configStack))
     println("Impl="+Util.implicationGraphToString(configStack.top.implications));
-		var highestAssignment = configStack.pop().assignments.last
+    println("VarVals="+program.varVals.toList);
+    var lastState = configStack.pop()
+		var highestAssignment = lastState.assignments.last
     var assignments = List[Assignment]()
     if(!configStack.isEmpty){
       assignments = configStack.top.assignments
     }
+    println("Assignments="+assignments.toList);
     var newAssignments = assignments :+ (highestAssignment._1, !highestAssignment._2)
 		if (triedAssignments.contains(newAssignments.toSet)) {
 			return backtrack(program, configStack, triedAssignments)
 		} else {
+      setVarVals(assignments, program)
 			return deduce(program, configStack, highestAssignment._1, triedAssignments)
 		}
 	}
@@ -124,14 +132,25 @@ object DPLL {
         program.updateVarVal(assign._1, assign._2)
       })
 		}
+    println("Done Propogating:"+program.varVals.toList)
 		return (getStatus(program), variablesSet)
 	}
+
+  def setVarVals(assign: List[Assignment], p: Program) = {
+    Range(0, p.varVals.length).foreach((v)=>{
+      p.updateVarVal(v, -1)
+    })
+    assign.foreach((a) => {
+      p.updateVarVal(a._1, BoolToInt(a._2))
+    })
+  }
 
 	/* Set a variable, propogate its implications, detect conflicts, and backtrack. */
 	def deduce(program: Program,
       configStack: scala.collection.mutable.Stack[State],
       variable: Int,
       triedAssignments: scala.collection.mutable.Set[Set[Assignment]]): ProgramStatus = {
+
     var newImplicationGraph = CDCL.emptyGraph()
 		for (value <- Array(true, false)) {
       var assignments = List[Assignment]()
@@ -139,7 +158,12 @@ object DPLL {
       if(!configStack.isEmpty){
         assignments = configStack.top.assignments
         implications = configStack.top.implications
-      }
+        println("DEDUCING")
+        println("Stack="+Util.configStackToString(configStack))
+        println("Impl="+Util.implicationGraphToString(configStack.top.implications));
+        println("VarVals="+program.varVals.toList);
+        println("Assignments="+assignments)
+        }
       var newAssignments = assignments :+ (variable, value)
 			if (!triedAssignments.contains(newAssignments.toSet)) {
         println("Trying: "+(variable, value))
@@ -171,11 +195,13 @@ object DPLL {
           var newState = new State(assignments :+ (variable, value), newImplicationGraph)
 					configStack.push(newState)
 					for (variable <- variablesSet){
+            /* Don't need this I think
             var lastState = configStack.top
             newState = new State(
               lastState.assignments :+ (variable,
                 IntToBool(program.varVals(variable))), newImplicationGraph)
 						configStack.push(newState)
+            */
 					}
 					return status
 				}
@@ -243,6 +269,15 @@ object DPLL {
 		}
 	}
 
+  def findHighestUnset(varVals: Array[Int]) : Int = {
+    Range(0, varVals.length).foreach((i)=>{
+      if(varVals(i) == -1) {
+        return i
+      }
+    })
+    throw new Exception("No unset vars!")
+  }
+
 	/* Implementation of the DPLL algorithm. */
 	def DPLL(program: Program): ProgramStatus = {
     println("NOT TRIMMING UNIQUE VARS!!! CHANGE THIS!!!")
@@ -255,10 +290,11 @@ object DPLL {
       = scala.collection.mutable.Set[Set[Assignment]]()
 		var nextVar = 0
 		while (status == Unknown) {
-			while ((nextVar < program.varVals.size) && program.varVals(nextVar) != -1) {
+			while ((nextVar+1 < program.varVals.size) && program.varVals(nextVar) != -1) {
 				nextVar += 1
 			}
-			status = deduce(program, configStack, nextVar, triedAssignments)
+      var varNext = findHighestUnset(program.varVals)
+			status = deduce(program, configStack, varNext, triedAssignments)
 		}
 		return status
 	}
