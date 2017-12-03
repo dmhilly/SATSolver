@@ -1,4 +1,5 @@
 // TODO: 
+// Allow parsing cnf files with comments
 // Right now, after backtracking, playing forward doesn't work (skips unit prop)
 // See the example "easy.cnf"
 // Clean
