@@ -1,4 +1,5 @@
 // TODO: 
+// Clean
 // seems to be hanging for bench3/aim-100-1_6-no-1.cnf
 // Stack deprecated maybe use List instead
 // add random restart optimization
@@ -245,7 +246,7 @@ object DPLL {
     println("NOT TRIMMING UNIQUE VARS!!! CHANGE THIS!!!")
     println("Vars:"+program.v.toList)
     println("Clauses: "+Util.clausesToString(program.clauses));
-		// setUniqueVars(program)
+		setUniqueVars(program)
 		var status = getStatus(program)
 		var configStack = new scala.collection.mutable.Stack[State]
 		var triedAssignments : scala.collection.mutable.Set[Set[Assignment]] 

@@ -1,6 +1,6 @@
 
 object CDCL {
-  val enabled = false
+  val enabled = true
 
   type Assignment = (Int, Boolean)
   
@@ -30,23 +30,6 @@ object CDCL {
       }
     }
   }
-
-  // Take result of unit propagation and update propagation tree
-  /*
-  def updateImplicationTree(
-      g: ImplicationGraph,, prop: (DPLL.ProgramStatus, Array[Int]), prog: DPLL.Program) {
-    println("Told to update :"+prop._2.toList)
-    g.nodes += a
-    for(changedVar <- prop._2) {
-      var b = (changedVar, DPLL.IntToBool(prog.varVals(changedVar)))
-      if(a._1 != b._1) {
-        g.nodes += b
-        g.edges += ((a, b))
-      }
-    }
-    println("Now its: "+Util.implicationGraphToString(g))
-  }
-  */
 
   def findImplicators(i : ImplicationGraph, a : Assignment) : Set[Assignment] = {
     var toReturn = Set[Assignment]()
