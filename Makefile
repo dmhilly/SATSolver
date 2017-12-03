@@ -9,6 +9,9 @@ all: help
 backjump:
 	scala -cp classes DPLL tests/integration/sat/backjumpsimple.cnf
 
+easy:
+	scala -cp classes DPLL tests/integration/sat/aim-50-1_6-yes1-1.cnf
+
 simple:
 	scala -cp classes DPLL tests/integration/sat/backtrack.cnf
 
@@ -62,6 +65,9 @@ unsat3:
 	scala -cp classes DPLL last_sat_competition/bench2/unsat/180-2100.cnf
 	scala -cp classes DPLL last_sat_competition/bench2/unsat/180-2200.cnf
 
+sathard:
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-200-2_0-yes1-1.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-200-6_0-yes1-1.cnf
 help:
 	@echo "This script compiles the file(s) ${SRC}"
 	@echo "Compiled classes are stored in the classes/ directory"
