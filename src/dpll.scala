@@ -31,7 +31,8 @@ object DPLL {
 		}
 	}
 
-  class Config(varNum: Int, set: Boolean, impl: CDCL.ImplicationGraph)
+  type Assignment = (Int, Boolean)
+  class State(var assignments: List[Assignment], var implications: CDCL.ImplicationGraph)
 
 	sealed trait ProgramStatus
 
@@ -46,18 +47,22 @@ object DPLL {
 	/* Backtrack to the highest level such that both values of the variable have not been tried. */
 	def backtrack(
       program: Program,
-      configStack: scala.collection.mutable.Stack[(Int, Boolean)],
-      triedConfigs: scala.collection.mutable.Set[Set[(Int, Boolean)]]): ProgramStatus = {
+      configStack: scala.collection.mutable.Stack[State],
+      triedAssignments: scala.collection.mutable.Set[Set[Assignment]]): ProgramStatus = {
     println("Backtracking:"+configStack)
 		if (configStack.isEmpty){
 			return Unsatisfiable
 		}
-		var highestAssignment = configStack.pop()
-		var newConfig = constructNewConfig(configStack, highestAssignment._1, !highestAssignment._2)
-		if (triedConfigs.contains(newConfig)) {
-			return backtrack(program, configStack, triedConfigs)
+		var highestAssignment = configStack.pop().assignments.last
+    var assignments = List[Assignment]()
+    if(!configStack.isEmpty){
+      assignments = configStack.top.assignments
+    }
+    var newAssignments = assignments :+ (highestAssignment._1, !highestAssignment._2)
+		if (triedAssignments.contains(newAssignments.toSet)) {
+			return backtrack(program, configStack, triedAssignments)
 		} else {
-			return deduce(program, configStack, highestAssignment._1, triedConfigs)
+			return deduce(program, configStack, highestAssignment._1, triedAssignments)
 		}
 	}
 
@@ -109,46 +114,57 @@ object DPLL {
 		return (getStatus(program), variablesSet)
 	}
 
-	/* Convert current configuration stack to a set and add assignment to it. */
-	def constructNewConfig(configStack: scala.collection.mutable.Stack[(Int, Boolean)],
-      variable: Int, value: Boolean): Set[(Int, Boolean)] = {
+  /*
+	// Convert current configuration stack to a set and add assignment to it.
+	def constructNewConfig(configStack: scala.collection.mutable.Stack[Config],
+      variable: Int, value: Boolean): Set[Config] = {
 		var configSet = configStack.toArray.toSet
-		var newAssignment = (variable, value)
+		var newAssignment = (variable, value, null)
 		return (configSet + newAssignment)
 	}
+  */
 
 	/* Set a variable, propogate its implications, detect conflicts, and backtrack.
    * Note: variables are 1-indexed
    */
-	def deduce(program: Program, configStack: scala.collection.mutable.Stack[(Int, Boolean)],
+	def deduce(program: Program,
+      configStack: scala.collection.mutable.Stack[State],
       variable: Int,
-      triedConfigs: scala.collection.mutable.Set[Set[(Int, Boolean)]]): ProgramStatus = {
+      triedAssignments: scala.collection.mutable.Set[Set[Assignment]]): ProgramStatus = {
 		for (value <- Array(true, false)) {
-			var newConfig = constructNewConfig(configStack, variable, value)
-			if (!triedConfigs.contains(newConfig)) {
-        println("Trying: "+newConfig)
+      var assignments = List[Assignment]()
+      if(!configStack.isEmpty){
+        assignments = configStack.top.assignments
+      }
+      var newAssignments = assignments :+ (variable, value)
+			if (!triedAssignments.contains(newAssignments.toSet)) {
+        println("Trying: "+(variable, value))
 				program.updateVarVal(variable, value)
 				var results = propogateAssignment(program)
 				var status = results._1
 				var variablesSet = results._2
 				for (variable <- variablesSet){
 					var assignment = (variable, IntToBool(program.varVals(variable)))
-					newConfig += assignment
+					newAssignments :+ assignment
 				}
-				triedConfigs += newConfig
+				triedAssignments += newAssignments.toSet
 				if (status == Conflict){
 					variablesSet :+= variable
 					unsetVars(program, variablesSet)
 				} else {
-					configStack.push((variable, value))
+          var newState = new State(assignments :+ (variable, value), null)
+					configStack.push(newState)
 					for (variable <- variablesSet){
-						configStack.push((variable, IntToBool(program.varVals(variable))))
+            var lastState = configStack.top
+            newState = new State(
+              lastState.assignments :+ (variable, IntToBool(program.varVals(variable))), null)
+						configStack.push(newState)
 					}
 					return status
 				}
 			}
 		}
-		return backtrack(program, configStack, triedConfigs)
+		return backtrack(program, configStack, triedAssignments)
 	}
 
 	/* Indicates whether the current assignment of variables is satisfiable. */
@@ -211,15 +227,15 @@ object DPLL {
     println("Clauses: "+Util.clausesToString(program.clauses));
 		setUniqueVars(program)
 		var status = getStatus(program)
-		var configStack = new scala.collection.mutable.Stack[(Int, Boolean)]
-		var triedConfigs : scala.collection.mutable.Set[Set[(Int, Boolean)]] 
-      = scala.collection.mutable.Set[Set[(Int, Boolean)]]()
+		var configStack = new scala.collection.mutable.Stack[State]
+		var triedAssignments : scala.collection.mutable.Set[Set[Assignment]] 
+      = scala.collection.mutable.Set[Set[Assignment]]()
 		var nextVar = 0
 		while (status == Unknown) {
 			while ((nextVar < program.varVals.size) && program.varVals(nextVar) != -1) {
 				nextVar += 1
 			}
-			status = deduce(program, configStack, nextVar, triedConfigs)
+			status = deduce(program, configStack, nextVar, triedAssignments)
 		}
 		return status
 	}

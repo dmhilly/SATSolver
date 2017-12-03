@@ -4,7 +4,7 @@ UTIL = src/util.scala
 
 all: help
 	-[ -e classes ] || mkdir classes
-	scalac -d classes ${SRC} ${DCL} ${UTIL}
+	scalac -d classes ${SRC} ${CDCL} ${UTIL}
 
 
 simple:
