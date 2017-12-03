@@ -161,8 +161,10 @@ object DPLL {
             if(newClause == null) {
               println("No conflict")
             } else {
-              println("Added clause: "+Util.clauseToString(newClause))
-              program.clauses = program.clauses :+ newClause
+              if(CDCL.enabled){
+                program.clauses = program.clauses :+ newClause
+                println("Added clause: "+Util.clauseToString(newClause))
+              }
             }
           }
 				} else {

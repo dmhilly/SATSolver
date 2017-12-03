@@ -28,7 +28,7 @@ hard5:
 	scala -cp classes DPLL last_sat_competition/bench3/hole6.cnf
 
 internet:
-	scala -cp classes DPLL tests/integration/industry.cnf
+	scala -cp classes DPLL tests/integration/sat/aim-50-1_6-yes1-1.cnf
 
 
 sat: 
