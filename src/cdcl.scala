@@ -53,8 +53,8 @@ object CDCL {
     return toReturn
   }
 
+  // Conflict analysis
   def getConflictClause(implications: ImplicationGraph) : DPLL.Clause = {
-    println("Running conflict analysis on implication graph: "+Util.implicationGraphToString(implications))
     var conflicts = findConflictVars(implications)
     if(conflicts.isEmpty) {
       return null
@@ -76,7 +76,6 @@ object CDCL {
     })
 
     var newClause = new DPLL.Clause(newLiterals, false)
-    println("Found resolution clause: "+Util.clauseToString(newClause))
     return newClause
   }
 
@@ -112,7 +111,6 @@ object CDCL {
       conflictVars = getVarsInClause(conflictClause)
     }
     while(true){
-      println("Backjumping")
       if (configStack.isEmpty){
         return DPLL.Unsatisfiable
       }
@@ -122,8 +120,10 @@ object CDCL {
         assignments = configStack.top.assignments
       }
       var newAssignments = assignments :+ (highestAssignment._1, !highestAssignment._2)
+
+      // If this is true, we've pruned a decision tree
       if(countVarsSet(conflictVars, assignments) <= 1){
-        println("PRUNING "+newAssignments)
+        // println("PRUNING "+newAssignments)
       }
       if(countVarsSet(conflictVars, assignments) <= 1 && !triedAssignments.contains(newAssignments.toSet)){
         DPLL.setVarVals(assignments, program)
@@ -132,6 +132,4 @@ object CDCL {
     }
     throw new Exception("Program should not reach here")
 	}
-
-
 }

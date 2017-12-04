@@ -14,6 +14,11 @@ import scala.io.Source
 
 object DPLL {
 
+  // Randomness
+  val randomRestartEnabled=true
+  var timeLimit = 1000
+  var timeMultiplier = 2
+
 	class Literal(var varNum: Int, var negated: Boolean) {
 		def canEqual(a: Any) = a.isInstanceOf[Literal]
 		override def equals(that: Any): Boolean = 
@@ -55,20 +60,15 @@ object DPLL {
       program: Program,
       configStack: scala.collection.mutable.Stack[State],
       triedAssignments: scala.collection.mutable.Set[Set[Assignment]]): ProgramStatus = {
-    println("Backtracking")
 		if (configStack.isEmpty){
 			return Unsatisfiable
 		}
-    println("Stack="+Util.configStackToString(configStack))
-    println("Impl="+Util.implicationGraphToString(configStack.top.implications));
-    println("VarVals="+program.varVals.toList);
     var lastState = configStack.pop()
 		var highestAssignment = lastState.assignments.last
     var assignments = List[Assignment]()
     if(!configStack.isEmpty){
       assignments = configStack.top.assignments
     }
-    println("Assignments="+assignments.toList);
     var newAssignments = assignments :+ (highestAssignment._1, !highestAssignment._2)
 		if (triedAssignments.contains(newAssignments.toSet)) {
 			return backtrack(program, configStack, triedAssignments)
@@ -101,7 +101,6 @@ object DPLL {
 			}
 		}
 		if (unassignedLit == null){
-      println("Bad clause:"+Util.clauseToString(new Clause(literals, false)))
 			return (false, null) // clause evaluates to false, nothing unassigned
 		}
 		return (true, unassignedLit)
@@ -111,7 +110,6 @@ object DPLL {
 	def propogateAssignment(program: Program, i: CDCL.ImplicationGraph): (ProgramStatus, Array[Int]) = {
 		var variablesSet : Array[Int] = Array[Int]()
 		var setVariables = true
-    println("Propogating:"+program.varVals.toList)
 		while (setVariables){
 			setVariables = false
       // Do updates at end to catch any conflicts
@@ -119,9 +117,9 @@ object DPLL {
 			for (clause <- program.clauses) {
 				var result = isUnit(clause.literals, program.varVals)
 				if (result._1) {
-          println(
-            "Found unit clause:"+Util.clauseToString(clause)+"; Literal: "+Util.literalToString(result._2))
-          CDCL.updateImplicationGraph(i, clause, result._2)
+          if(CDCL.enabled){
+            CDCL.updateImplicationGraph(i, clause, result._2)
+          }
 					var unitLit = result._2
 					var newVal = BoolToInt(!(unitLit.negated))
           updates += ((unitLit.varNum, newVal))
@@ -133,7 +131,6 @@ object DPLL {
         program.updateVarVal(assign._1, assign._2)
       })
 		}
-    println("Done Propogating:"+program.varVals.toList)
 		return (getStatus(program), variablesSet)
 	}
 
@@ -146,30 +143,48 @@ object DPLL {
     })
   }
 
+  // Which way do we process?
+  def order() : Array[Boolean] = {
+    if(!randomRestartEnabled){
+      return Array(true, false)
+    }
+    val r = new scala.util.Random
+    if(r.nextBoolean) {
+      return Array(true, false)
+    } else {
+      return Array(false, true)
+    }
+  }
+
 	/* Set a variable, propogate its implications, detect conflicts, and backtrack. */
 	def deduce(program: Program,
       configStack: scala.collection.mutable.Stack[State],
       variable: Int,
       triedAssignments: scala.collection.mutable.Set[Set[Assignment]]): ProgramStatus = {
 
+    // New impl. graph
     var newImplicationGraph = CDCL.emptyGraph()
 		for (value <- Array(true, false)) {
+
+      // Create new assignment list/implication graph if first iteration
       var assignments = List[Assignment]()
       var implications = CDCL.emptyGraph()
       if(!configStack.isEmpty){
         assignments = configStack.top.assignments
         implications = configStack.top.implications
-        println("DEDUCING")
-        println("Stack="+Util.configStackToString(configStack))
-        println("Impl="+Util.implicationGraphToString(configStack.top.implications));
-        println("VarVals="+program.varVals.toList);
-        println("Assignments="+assignments)
-        }
+      }
+
+      // Next assignment to try
       var newAssignments = assignments :+ (variable, value)
 			if (!triedAssignments.contains(newAssignments.toSet)) {
-        println("Trying: "+(variable, value))
 				program.updateVarVal(variable, value)
-        newImplicationGraph = CDCL.copyGraph(implications)
+
+        // Copy over implication graph
+        if(CDCL.enabled){
+          newImplicationGraph = CDCL.copyGraph(implications)
+        }
+
+        // Unit prop.
 				var results = propogateAssignment(program, newImplicationGraph)
 				var status = results._1
 				var variablesSet = results._2
@@ -177,40 +192,33 @@ object DPLL {
 					var assignment = (variable, IntToBool(program.varVals(variable)))
 					newAssignments :+ assignment
 				}
+
 				triedAssignments += newAssignments.toSet
 				if (status == Conflict){
+          // Dead end
 					variablesSet :+= variable
 					unsetVars(program, variablesSet)
           if(CDCL.enabled) {
+            // ADD new clause
             var newClause = CDCL.getConflictClause(newImplicationGraph)
             if(newClause == null) {
-              println("No conflict")
+              // println("No conflict")
             } else {
               if(CDCL.enabled){
                 program.clauses = program.clauses :+ newClause
-                println("Added clause: "+Util.clauseToString(newClause))
               }
             }
           }
 				} else {
+          // Pitter patter on...
           var newState = new State(assignments :+ (variable, value), newImplicationGraph)
 					configStack.push(newState)
-					for (variable <- variablesSet){
-            /* Don't need this I think
-            var lastState = configStack.top
-            newState = new State(
-              lastState.assignments :+ (variable,
-                IntToBool(program.varVals(variable))), newImplicationGraph)
-						configStack.push(newState)
-            */
-					}
 					return status
 				}
 			}
 		}
     if(CDCL.enabled) {
       return CDCL.backjump(program, configStack, triedAssignments, newImplicationGraph)
-      // return backtrack(program, configStack, triedAssignments)
     } else{
       return backtrack(program, configStack, triedAssignments)
     }
@@ -281,21 +289,22 @@ object DPLL {
 
 	/* Implementation of the DPLL algorithm. */
 	def DPLL(program: Program): ProgramStatus = {
-    println("NOT TRIMMING UNIQUE VARS!!! CHANGE THIS!!!")
-    println("Vars:"+program.v.toList)
-    println("Clauses: "+Util.clausesToString(program.clauses));
 		setUniqueVars(program)
+    var counter = 0 // Runtime tracker
 		var status = getStatus(program)
 		var configStack = new scala.collection.mutable.Stack[State]
 		var triedAssignments : scala.collection.mutable.Set[Set[Assignment]] 
       = scala.collection.mutable.Set[Set[Assignment]]()
-		var nextVar = 0
 		while (status == Unknown) {
-			while ((nextVar+1 < program.varVals.size) && program.varVals(nextVar) != -1) {
-				nextVar += 1
-			}
       var varNext = findHighestUnset(program.varVals)
 			status = deduce(program, configStack, varNext, triedAssignments)
+      counter += 1
+      if(counter > timeLimit) {
+        counter = 0
+        timeLimit = timeLimit * timeMultiplier
+        val newProgram = new Program(program.clauses, Array.fill[Int](program.varVals.length)(-1))
+        return DPLL(newProgram)
+      }
 		}
 		return status
 	}
