@@ -311,7 +311,7 @@ object DPLL {
 
 	/* Construct clause from input line, a string of integers. */
 	def constructClause(line: String, numVars: Int): Clause = {
-		var literalsStrings = line.split("\\s+")
+		var literalsStrings = line.trim().split("\\s+")
 		var literals : Array[Literal] = Array[Literal]()
 		for (s <- literalsStrings) {
       if(s != "0"){
@@ -358,7 +358,7 @@ object DPLL {
 				numClauses = spec(3).toInt
 			} else if (count > numClauses){
 				throw new IOException
-			} else {
+      } else {
 				try {
 					clauses :+= constructClause(line, numVars)
 				} catch {
