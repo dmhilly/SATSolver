@@ -13,6 +13,33 @@ ourbenchmarks:
 	scala -cp classes DPLL last_sat_competition/bench4/sat/wikipedia.cnf
 	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-50-2_0-no-4.cnf
 
+aimsat:
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-1_6-yes1-1.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-1_6-yes1-2.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-1_6-yes1-3.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-1_6-yes1-4.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-2_0-yes1-1.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-2_0-yes1-2.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-2_0-yes1-3.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-2_0-yes1-4.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-3_4-yes1-1.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-3_4-yes1-2.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-3_4-yes1-3.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-3_4-yes1-4.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-6_0-yes1-1.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-6_0-yes1-2.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-6_0-yes1-3.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/sat/aim-50-6_0-yes1-4.cnf
+
+aimunsat:
+	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-50-1_6-no-1.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-50-1_6-no-2.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-50-1_6-no-3.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-50-1_6-no-4.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-50-2_0-no-2.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-50-2_0-no-3.cnf
+	scala -cp classes DPLL last_sat_competition/bench4/unsat/aim-50-2_0-no-4.cnf
+
 help:
 	@echo "This script compiles the file(s) ${SRC}"
 	@echo "Compiled classes are stored in the classes/ directory"
